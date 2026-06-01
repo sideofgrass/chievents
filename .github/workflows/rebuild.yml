@@ -1,0 +1,42 @@
+name: Rebuild calendar (Thursdays noon CT)
+
+on:
+  schedule:
+    # GitHub cron is in UTC. Chicago noon = 17:00 UTC (CDT, summer) / 18:00 UTC (CST, winter).
+    # Both lines are listed so it fires at local noon year-round; the dedupe/commit step
+    # makes a double-fire harmless (no change = no commit).
+    - cron: "0 17 * * 4"   # Thu 12:00 CDT (Mar–Nov)
+    - cron: "0 18 * * 4"   # Thu 12:00 CST (Nov–Mar)
+  workflow_dispatch: {}      # lets you trigger a rebuild manually from the Actions tab
+
+permissions:
+  contents: write            # allow the action to commit the regenerated index.html
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build calendar
+        env:
+          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
+        run: python scripts/build.py
+
+      - name: Commit changes if any
+        run: |
+          git config user.name "calendar-bot"
+          git config user.email "actions@github.com"
+          git add index.html
+          if git diff --staged --quiet; then
+            echo "No changes this week."
+          else
+            git commit -m "Auto-rebuild calendar $(date -u +%Y-%m-%d)"
+            git push
+          fi
